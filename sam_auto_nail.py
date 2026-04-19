@@ -1,58 +1,38 @@
 import numpy as np
 import cv2
 import torch
-import segment_anything
-from segment_anything import sam_model_registry
+from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 
 # ===== GLOBAL SINGLETON =====
 _sam = None
 _mask_generator = None
 _device = None
 
+# ===== LOAD MODEL =====
+def get_device():
+    if torch.cuda.is_available():
+        return "cuda"
+    # elif torch.backends.mps.is_available():
+    #     return "mps"
+    return "cpu"
 
-# ===== LOAD MODEL (SAFE) =====
-def load_model(model_path: str):
+def load_model(model_path):
     global _sam, _mask_generator, _device
+    device = get_device()
 
-    if _sam is not None:
-        print("⚡ Model already loaded")
-        return
+    _sam = sam_model_registry["vit_b"](checkpoint=model_path)
+    _sam.to(device)
+    _sam = _sam.float()  # 🔥 bắt buộc cho MPS
 
-    # detect device
-    _device = "cuda" if torch.cuda.is_available() else "cpu"
-    if torch.backends.mps.is_available():
-        _device = "mps"
-
-    print("🚀 Loading SAM on:", _device)
-
-    # load model
-    sam_model = sam_model_registry["vit_b"](checkpoint=model_path)
-    sam_model.to(_device)
-
-    if sam_model is None:
-        raise Exception("❌ SAM load failed")
-
-    # create mask generator
-    _mask_generator = segment_anything.SamAutomaticMaskGenerator(
-        model=sam_model,
+    _mask_generator = SamAutomaticMaskGenerator(
+        model=_sam,
         points_per_side=32,
         pred_iou_thresh=0.88,
         stability_score_thresh=0.92,
         min_mask_region_area=500
-
-        # model=sam_model,
-        # points_per_side=8,          # 🔥 giảm mạnh (32 → 8)
-        # pred_iou_thresh=0.9,
-        # stability_score_thresh=0.95,
-        # min_mask_region_area=2000   # bỏ mask nhỏ
     )
 
-    _sam = sam_model
-
-    print("✅ SAM loaded successfully")
-
-
-# ===== SCORE MASK (CHỌN MÓNG) =====
+# ===== SCORE MASK =====
 def score_mask(mask, h, w):
     ys, xs = np.where(mask)
     if len(xs) == 0:
@@ -87,6 +67,7 @@ def score_mask(mask, h, w):
 
 # ===== MAIN FUNCTION =====
 def extract_nail_auto(image_np):
+    global _mask_generator
     """
     input: numpy image (BGR từ OpenCV)
     output: RGBA image (numpy)
@@ -94,10 +75,13 @@ def extract_nail_auto(image_np):
 
     # convert sang RGB cho SAM
     image_rgb = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+    # 🔥 QUAN TRỌNG
+    image_rgb = image_rgb.astype(np.uint8)   # hoặc float32 đều được
+
     h, w, _ = image_rgb.shape
 
     # ===== STEP 1: generate masks =====
-    masks = mask_generator.generate(image_rgb)
+    masks = _mask_generator.generate(image_rgb)
 
     best_score = -1
     best_mask = None

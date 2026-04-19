@@ -4,8 +4,8 @@ import base64
 import numpy as np
 import cv2
 import base64
-from sam_nail import extract_nail
-from sam_auto_nail import extract_nail_auto
+import nest_asyncio
+from sam_auto_nail import extract_nail_auto, load_model
 
 app = FastAPI()
 
@@ -27,7 +27,10 @@ async def extract(file: UploadFile = File(...)):
 
     cv2.imwrite("tmp.png", img)
 
-    result = extract_nail("tmp.png")
+    # result = extract_nail("tmp.png")
+    MODEL_PATH = "./models/sam_vit_b_01ec64.pth"
+    load_model(MODEL_PATH)
+
     result = extract_nail_auto("tmp.png")
 
     _, buffer = cv2.imencode(".png", result)
@@ -45,6 +48,8 @@ async def extract(file: UploadFile = File(...)):
   img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
   # cv2.imwrite("tmp.png", img)
+  MODEL_PATH = "./models/sam_vit_b_01ec64.pth"
+  load_model(MODEL_PATH)
 
   # result = extract_nail("tmp.png")
   result = extract_nail_auto(img)
@@ -54,3 +59,6 @@ async def extract(file: UploadFile = File(...)):
   return {
     "image": base64.b64encode(buffer).decode()
   }
+
+# Cần thiết khi chạy Uvicorn bên trong Colab
+nest_asyncio.apply()
