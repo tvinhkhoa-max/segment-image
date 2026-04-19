@@ -34,11 +34,17 @@ def load_model(model_path: str):
 
     # create mask generator
     _mask_generator = segment_anything.SamAutomaticMaskGenerator(
+        # model=sam_model,
+        # points_per_side=32,
+        # pred_iou_thresh=0.88,
+        # stability_score_thresh=0.92,
+        # min_mask_region_area=500
+
         model=sam_model,
-        points_per_side=32,
-        pred_iou_thresh=0.88,
-        stability_score_thresh=0.92,
-        min_mask_region_area=500
+        points_per_side=8,          # 🔥 giảm mạnh (32 → 8)
+        pred_iou_thresh=0.9,
+        stability_score_thresh=0.95,
+        min_mask_region_area=2000   # bỏ mask nhỏ
     )
 
     _sam = sam_model
