@@ -11,15 +11,14 @@ mask_generator = None
 # sam.to("cpu")
 def load_model(model_path):
     global sam, mask_generator
+    from segment_anything import SamAutomaticMaskGenerator
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if torch.backends.mps.is_available():
         device = "mps"
 
-    sam = sam_model_registry["vit_b"](checkpoint=model_path)
-    sam.to(device)
-
-    from segment_anything import SamAutomaticMaskGenerator
+    # sam = sam_model_registry["vit_b"](checkpoint=model_path)
+    # sam.to(device)
 
     mask_generator = SamAutomaticMaskGenerator(
         model=sam,
