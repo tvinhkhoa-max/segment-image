@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import torch
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
+# from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 
 # load model
 sam = None
@@ -32,13 +32,13 @@ def load_model(model_path):
     print("Model loaded on:", device)
 
 
-mask_generator = SamAutomaticMaskGenerator(
-    model=sam,
-    points_per_side=32,
-    pred_iou_thresh=0.88,
-    stability_score_thresh=0.92,
-    min_mask_region_area=500
-)
+# mask_generator = SamAutomaticMaskGenerator(
+#     model=sam,
+#     points_per_side=32,
+#     pred_iou_thresh=0.88,
+#     stability_score_thresh=0.92,
+#     min_mask_region_area=500
+# )
 
 def score_mask(mask, h, w):
     ys, xs = np.where(mask)
@@ -120,6 +120,7 @@ def extract_nail_auto(image_np):
     input: numpy image (BGR từ OpenCV)
     output: RGBA image (numpy)
     """
+    global mask_generator
 
     # convert sang RGB cho SAM
     image_rgb = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
