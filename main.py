@@ -71,4 +71,4 @@ async def extract(file: UploadFile = File(...)):
     return Response(buffer.tobytes(), media_type="image/png")
 
 # Cần thiết khi chạy Uvicorn bên trong Colab
-nest_asyncio.apply()
+# nest_asyncio.apply()
