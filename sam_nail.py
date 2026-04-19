@@ -5,10 +5,10 @@ from PIL import Image
 from segment_anything import sam_model_registry, SamPredictor
 
 # load model
-sam = sam_model_registry["vit_b"](checkpoint="models/sam_vit_b_01ec64.pth")
-sam.to("cpu")
+# sam = sam_model_registry["vit_b"](checkpoint="models/sam_vit_b_01ec64.pth")
+# sam.to("cpu")
 
-predictor = SamPredictor(sam)
+# predictor = SamPredictor(sam)
 
 def extract_nail(image_path):
     image = cv2.imread(image_path)
@@ -37,5 +37,5 @@ def extract_nail(image_path):
 
     return result
 
-result = extract_nail("tdsq2ir0abkg28pnzdi8j3nh_cropped.png")
-cv2.imwrite("output.png", result)
+# result = extract_nail("tdsq2ir0abkg28pnzdi8j3nh_cropped.png")
+# cv2.imwrite("output.png", result)
