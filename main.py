@@ -1,10 +1,11 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, Response, UploadFile, File
 from rembg import remove
 import base64
 import numpy as np
 import cv2
 import base64
 import nest_asyncio
+import os
 from sam_auto_nail import extract_nail_auto, load_model
 
 app = FastAPI()
@@ -41,6 +42,12 @@ async def extract(file: UploadFile = File(...)):
 
 @app.post("/extract")
 async def extract(file: UploadFile = File(...)):
+  MODEL_PATH = os.environ.get('MODEL_PATH')
+  UPLOAD_PATH = os.environ.get('UPLOAD_PATH')
+
+  if MODEL_PATH is None:
+     MODEL_PATH = "./models/sam_vit_b_01ec64.pth"
+
   input_bytes = await file.read()
   output = remove(input_bytes)
 
@@ -48,7 +55,6 @@ async def extract(file: UploadFile = File(...)):
   img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
   # cv2.imwrite("tmp.png", img)
-  MODEL_PATH = "./models/sam_vit_b_01ec64.pth"
   load_model(MODEL_PATH)
 
   # result = extract_nail("tmp.png")
@@ -56,9 +62,13 @@ async def extract(file: UploadFile = File(...)):
 
   _, buffer = cv2.imencode(".png", result)
 
-  return {
-    "image": base64.b64encode(buffer).decode()
-  }
+  if UPLOAD_PATH is None:
+    return {
+      "image": base64.b64encode(buffer).decode()
+    }
+  else:
+    cv2.imwrite(UPLOAD_PATH, cv2.cvtColor(result, cv2.COLOR_RGBA2BGRA))
+    return Response(buffer.tobytes(), media_type="image/png")
 
 # Cần thiết khi chạy Uvicorn bên trong Colab
 nest_asyncio.apply()
