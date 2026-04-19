@@ -1,45 +1,53 @@
 import numpy as np
 import cv2
 import torch
-# from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
+import segment_anything
+from segment_anything import sam_model_registry
 
-# load model
-sam = None
-mask_generator = None
+# ===== GLOBAL SINGLETON =====
+_sam = None
+_mask_generator = None
+_device = None
 
-# sam = sam_model_registry["vit_b"](checkpoint="models/sam_vit_b_01ec64.pth")
-# sam.to("cpu")
-def load_model(model_path):
-    global sam, mask_generator
-    from segment_anything import SamAutomaticMaskGenerator
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+# ===== LOAD MODEL (SAFE) =====
+def load_model(model_path: str):
+    global _sam, _mask_generator, _device
+
+    if _sam is not None:
+        print("⚡ Model already loaded")
+        return
+
+    # detect device
+    _device = "cuda" if torch.cuda.is_available() else "cpu"
     if torch.backends.mps.is_available():
-        device = "mps"
+        _device = "mps"
 
-    # sam = sam_model_registry["vit_b"](checkpoint=model_path)
-    # sam.to(device)
+    print("🚀 Loading SAM on:", _device)
 
-    mask_generator = SamAutomaticMaskGenerator(
-        model=sam,
+    # load model
+    sam_model = sam_model_registry["vit_b"](checkpoint=model_path)
+    sam_model.to(_device)
+
+    if sam_model is None:
+        raise Exception("❌ SAM load failed")
+
+    # create mask generator
+    _mask_generator = segment_anything.SamAutomaticMaskGenerator(
+        model=sam_model,
         points_per_side=32,
         pred_iou_thresh=0.88,
         stability_score_thresh=0.92,
         min_mask_region_area=500
     )
 
-    print("Model loaded on:", device)
+    _sam = sam_model
+
+    print("✅ SAM loaded successfully")
 
 
-# mask_generator = SamAutomaticMaskGenerator(
-#     model=sam,
-#     points_per_side=32,
-#     pred_iou_thresh=0.88,
-#     stability_score_thresh=0.92,
-#     min_mask_region_area=500
-# )
-
-def score_mask(mask, h, w):
+# ===== SCORE MASK (CHỌN MÓNG) =====
+def _score_mask(mask, h, w):
     ys, xs = np.where(mask)
     if len(xs) == 0:
         return -1
@@ -56,106 +64,65 @@ def score_mask(mask, h, w):
 
     score = 0
 
-    # 🎯 nằm phía trên (móng)
-    if center_y < 0.5:
+    # 🎯 móng thường nằm phía trên
+    if center_y < 0.6:
         score += 2
 
-    # 🎯 shape giống móng
-    if 0.5 < aspect < 2.0:
+    # 🎯 shape móng (không quá dài hoặc quá vuông)
+    if 0.5 < aspect < 2.5:
         score += 2
 
-    # 🎯 size hợp lý
-    if 1000 < area < 20000:
+    # 🎯 diện tích hợp lý
+    if 800 < area < 50000:
         score += 2
 
     return score
 
 
-def extract_nail_auto_bk(image_path):
-    image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+# ===== MAIN FUNCTION =====
+def extract_nail_auto(image_np: np.ndarray):
+    global _mask_generator
 
-    masks = mask_generator.generate(image)
+    if _mask_generator is None:
+        raise Exception("❌ Model chưa load. Gọi load_model() trước.")
 
+    if image_np is None:
+        raise Exception("❌ Image input is None")
+
+    # convert BGR -> RGB
+    image_rgb = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+    h, w, _ = image_rgb.shape
+
+    # ===== STEP 1: generate masks =====
+    masks = _mask_generator.generate(image_rgb)
+
+    if len(masks) == 0:
+        raise Exception("❌ No mask generated")
+
+    # ===== STEP 2: chọn mask tốt nhất =====
     best_score = -1
     best_mask = None
 
     for m in masks:
         mask = m["segmentation"]
-        score = score_mask(mask, image.shape[:2])
+        score = _score_mask(mask, h, w)
 
         if score > best_score:
             best_score = score
             best_mask = mask
 
     if best_mask is None:
-        raise Exception("No nail detected")
-
-    # apply mask
-    # result = image.copy()
-    # result[~best_mask] = 0
-    # tạo ảnh RGBA
-    h, w, _ = image.shape
-    rgba = np.zeros((h, w, 4), dtype=np.uint8)
-
-    # copy màu gốc
-    rgba[:, :, :3] = image
-
-    # alpha channel
-    rgba[:, :, 3] = best_mask.astype(np.uint8) * 255
-
-    # crop
-    ys, xs = np.where(best_mask)
-    minx, maxx = xs.min(), xs.max()
-    miny, maxy = ys.min(), ys.max()
-
-    cropped = result[miny:maxy, minx:maxx]
-
-    return cropped
-
-# ===== MAIN FUNCTION =====
-def extract_nail_auto(image_np):
-    """
-    input: numpy image (BGR từ OpenCV)
-    output: RGBA image (numpy)
-    """
-    global mask_generator
-
-    # convert sang RGB cho SAM
-    image_rgb = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
-    h, w, _ = image_rgb.shape
-
-    # ===== STEP 1: generate masks =====
-    masks = mask_generator.generate(image_rgb)
-
-    best_score = -1
-    best_mask = None
-
-    # ===== STEP 2: chọn mask tốt nhất =====
-    for m in masks:
-        mask = m["segmentation"]
-        s = score_mask(mask, h, w)
-
-        if s > best_score:
-            best_score = s
-            best_mask = mask
-
-    if best_mask is None:
-        raise Exception("No nail detected")
+        raise Exception("❌ No nail detected")
 
     # ===== STEP 3: tạo alpha =====
     alpha = (best_mask * 255).astype(np.uint8)
 
-    # 🎯 làm mịn viền (anti-alias nhẹ)
+    # làm mịn viền
     alpha = cv2.GaussianBlur(alpha, (5, 5), 0)
 
     # ===== STEP 4: tạo RGBA =====
     rgba = np.zeros((h, w, 4), dtype=np.uint8)
-
-    # giữ nguyên màu gốc
-    rgba[:, :, 0:3] = image_rgb
-
-    # gán alpha
+    rgba[:, :, :3] = image_rgb
     rgba[:, :, 3] = alpha
 
     # ===== STEP 5: crop =====
@@ -166,7 +133,7 @@ def extract_nail_auto(image_np):
 
     cropped = rgba[miny:maxy, minx:maxx]
 
-    # ===== STEP 6: convert về BGRA để encode đúng màu =====
+    # ===== STEP 6: convert về BGRA (OpenCV chuẩn) =====
     output = cv2.cvtColor(cropped, cv2.COLOR_RGBA2BGRA)
 
     return output
